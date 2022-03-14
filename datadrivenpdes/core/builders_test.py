@@ -18,8 +18,6 @@ import tensorflow as tf
 
 from absl.testing import absltest
 
-# Use eager mode by default
-tf.enable_eager_execution()
 
 
 class BuildersTest(absltest.TestCase):

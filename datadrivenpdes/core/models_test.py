@@ -29,9 +29,6 @@ import tensorflow as tf
 from absl.testing import absltest
 
 
-# Use eager mode by default
-tf.enable_eager_execution()
-
 
 StateDef = states.StateDefinition
 
@@ -61,6 +58,7 @@ class ConvLayersTest(parameterized.TestCase):
 
     # identity layer, does nothing except normalizing input
     core_model = core_model_func(
+        num_inputs=1,
         num_outputs=1,
         scaled_keys={'concentration'},
         num_layers=3,
@@ -77,7 +75,8 @@ class ConvLayersTest(parameterized.TestCase):
     expected = np.array(expected, dtype=np.float32)[np.newaxis, ..., np.newaxis]
 
     # validate forward pass
-    inputs = {'concentration': tf.convert_to_tensor(inputs)}
+    #inputs = {'concentration': tf.convert_to_tensor(inputs)}
+    inputs=tf.convert_to_tensor(inputs)[:,:,:,None]
     outputs = core_model(inputs).numpy()
     np.testing.assert_allclose(outputs, expected, atol=atol)
 

@@ -25,6 +25,7 @@ from typing import (
 )
 
 import numpy as np
+import tree
 from datadrivenpdes.core import equations
 from datadrivenpdes.core import geometry
 from datadrivenpdes.core import grids
@@ -33,9 +34,6 @@ from datadrivenpdes.core import readers
 from datadrivenpdes.core import states
 from datadrivenpdes.core import tensor_ops
 import tensorflow as tf
-
-
-nest = tf.contrib.framework.nest
 
 
 T = TypeVar('T')
@@ -514,58 +512,76 @@ class Conv2DPeriodic(tf.keras.layers.Layer):
   def call(self, inputs):
     padded = tensor_ops.pad_periodic_2d(inputs, self.kernel_size)
     result = self._layer(padded)
-    assert result.shape[1:3] == inputs.shape[1:3], (result, inputs)
+    #assert result.shape[1:3] == inputs.shape[1:3], (result, inputs)
     return result
 
 
-def conv2d_stack(num_outputs, num_layers=5, filters=32, kernel_size=5,
+def conv2d_stack(num_inputs, num_outputs, num_layers=5, filters=32, kernel_size=5,
                  activation='relu', **kwargs):
   """Create a sequence of Conv2DPeriodic layers."""
-  model = tf.keras.Sequential()
-  model.add(tf.keras.layers.Lambda(stack_dict))
-  for _ in range(num_layers - 1):
-    layer = Conv2DPeriodic(
-        filters, kernel_size, activation=activation, **kwargs)
-    model.add(layer)
-  model.add(Conv2DPeriodic(num_outputs, kernel_size, **kwargs))
+  inp=tf.keras.Input(shape=(None,None,num_inputs))
+  x = Conv2DPeriodic(
+        filters, kernel_size, activation=activation, **kwargs)(inp)
+  for _ in range(1,num_layers - 1):
+    x = Conv2DPeriodic(
+        filters, kernel_size, activation=activation, **kwargs)(x)
+  x=Conv2DPeriodic(num_outputs, kernel_size, **kwargs)(x)
+  model = tf.keras.Model(inputs=inp,outputs=x)
   return model
 
+def _copy_dict(inputs):
+  """
+  Copies a dict of Tensor objects
+  """
+  return {k:tf.identity(inputs[k]) for k in inputs}
+
+def _apply_to_dict(inputs,model):
+  x=stack_dict(inputs)
+  return model(x)
 
 def _rescale_01(array, axis):
-  array_max = tf.reduce_max(array, axis, keep_dims=True)
-  array_min = tf.reduce_min(array, axis, keep_dims=True)
+  array_max = tf.reduce_max(array, axis, keepdims=True)
+  array_min = tf.reduce_min(array, axis, keepdims=True)
   return (array - array_min) / (array_max - array_min)
-
 
 class RescaledConv2DStack(tf.keras.Model):
   """Rescale input fields to stabilize PDE integration."""
 
-  def __init__(self, num_outputs: int, scaled_keys: Set[str], **kwargs):
+  def __init__(self,num_inputs, num_outputs: int, scaled_keys: Set[str], **kwargs):
     super().__init__()
-    self.original_model = conv2d_stack(num_outputs, **kwargs)
+    self.original_model = conv2d_stack(num_inputs, num_outputs, 
+                  **kwargs)
     self.scaled_keys = scaled_keys
 
   def call(self, inputs):
-    inputs = inputs.copy()
-    for key in self.scaled_keys:
-      inputs[key] = _rescale_01(inputs[key], axis=(-1, -2))
-
+    #inputs=_copy_dict(inputs)
+    #for key in self.scaled_keys:
+    #  inputs[key] = _rescale_01(inputs[key], axis=(-1, -2))
+    #return _apply_to_dict(inputs,self.original_model)
+    rsc_inputs=[]
+    for inp in tf.unstack(inputs,axis=-1):
+      rsc_inputs.append(_rescale_01(inp, axis=(-1, -2)))
+    inputs=tf.stack(rsc_inputs,axis=3)
     return self.original_model(inputs)
 
 
 class ClippedConv2DStack(tf.keras.Model):
   """Clip input fields to stabilize PDE integration."""
 
-  def __init__(self, num_outputs: int, scaled_keys: Set[str], **kwargs):
+  def __init__(self, num_inputs, num_outputs: int, scaled_keys: Set[str], **kwargs):
     super().__init__()
-    self.original_model = conv2d_stack(num_outputs, **kwargs)
+    self.original_model = conv2d_stack(num_inputs, num_outputs, **kwargs)
     self.scaled_keys = scaled_keys
 
   def call(self, inputs):
-    inputs = inputs.copy()
-    for key in self.scaled_keys:
-      inputs[key] = tf.clip_by_value(inputs[key], 1e-3, 1.0 - 1e-3)
-
+    #inputs=_copy_dict(inputs)
+    #for key in self.scaled_keys:
+    #  inputs[key] = tf.clip_by_value(inputs[key], 1e-3, 1.0 - 1e-3)
+    #return _apply_to_dict(inputs,self.original_model)
+    clp_inputs=[]
+    for inp in tf.unstack(inputs,axis=-1):
+      clp_inputs.append(tf.clip_by_value(inp, 1e-3, 1.0 - 1e-3))
+    inputs=tf.stack(clp_inputs,axis=3)
     return self.original_model(inputs)
 
 
@@ -608,10 +624,12 @@ class PseudoLinearModel(SpatialDerivativeModel):
     num_outputs = sum(
         layer.kernel_size for layer in self.output_layers.values()
     )
-    self.core_model = core_model_func(num_outputs, **kwargs)
+    n_base_keys=len(self.equation.base_keys)
+    self.core_model = core_model_func(n_base_keys,num_outputs, **kwargs)
 
   def _apply_model(self, state):
-    net = self.core_model(state)
+    net = _apply_to_dict(state,self.core_model)
+    #net = self.core_model(state)
 
     size_splits = [
         self.output_layers[key].kernel_size for key in self.output_layers
@@ -647,6 +665,7 @@ class NonlinearModel(SpatialDerivativeModel):
     self.learned_keys, self.fixed_keys = (
         normalize_learned_and_fixed_keys(learned_keys, fixed_keys, equation))
     self.core_model = core_model_func(
+        n_inputs=len(self.equation.base_keys),
         num_outputs=len(self.learned_keys), **kwargs)
     self.fd_model = FiniteDifferenceModel(
         equation, grid, finite_diff_accuracy_order)
@@ -655,7 +674,8 @@ class NonlinearModel(SpatialDerivativeModel):
       self, inputs: Mapping[str, tf.Tensor],
   ) -> Dict[str, tf.Tensor]:
     """See base class."""
-    net = self.core_model(inputs)
+    net = _apply_to_dict(inputs,self.core_model)
+    #net = self.core_model(inputs)
     heads = tf.unstack(net, axis=-1)
     result = dict(zip(self.learned_keys, heads))
 
@@ -674,10 +694,12 @@ class DirectModel(TimeStepModel):
                name='direct_model', **kwargs):
     super().__init__(equation, grid, num_time_steps, target, name)
     self.keys = equation.evolving_keys
-    self.core_model = core_model_func(num_outputs=len(self.keys), **kwargs)
+    self.core_model = core_model_func(len(self.equation.base_keys),
+                   num_outputs=len(self.keys), **kwargs)
 
   def take_time_step(self, inputs):
     """See base class."""
-    net = self.core_model(inputs)
+    #net = self.core_model(inputs)
+    net = _apply_to_dict(inputs,self.core_model)
     heads = tf.unstack(net, axis=-1)
     return dict(zip(self.keys, heads))

@@ -24,8 +24,6 @@ from datadrivenpdes.core import integrate
 from datadrivenpdes.core import models
 
 
-tf.enable_eager_execution()
-
 
 class IntegrateTest(absltest.TestCase):
 

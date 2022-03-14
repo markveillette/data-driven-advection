@@ -18,6 +18,7 @@ from absl import flags
 from absl.testing import flagsaver
 from absl.testing import parameterized
 import apache_beam as beam
+import tree
 from datadrivenpdes.core import models
 from datadrivenpdes.core import readers
 from datadrivenpdes.core import tensor_ops
@@ -28,11 +29,8 @@ from absl.testing import absltest
 
 FLAGS = flags.FLAGS
 
-nest = tf.contrib.framework.nest
 
 
-# Use eager mode by default
-tf.enable_eager_execution()
 
 
 class IntegrationTest(parameterized.TestCase):
@@ -71,7 +69,7 @@ class IntegrationTest(parameterized.TestCase):
     model = model_cls(equation, grid)
 
     def create_inputs(state):
-      inputs = nest.map_structure(lambda x: x[:-1], state)
+      inputs = tree.map_structure(lambda x: x[:-1], state)
       labels = state['concentration'][1:]
       return inputs, labels
 
@@ -99,7 +97,7 @@ class IntegrationTest(parameterized.TestCase):
 
     def create_inputs(state):
       # (batch, x, y)
-      inputs = nest.map_structure(lambda x: x[:-model.num_time_steps], state)
+      inputs = tree.map_structure(lambda x: x[:-model.num_time_steps], state)
       # (batch, time, x, y)
       labels = tensor_ops.stack_all_contiguous_slices(
           state['concentration'][1:], model.num_time_steps, new_axis=1)

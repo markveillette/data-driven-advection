@@ -19,6 +19,7 @@ import typing
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import tree
 from datadrivenpdes.core import grids
 from datadrivenpdes.core import states
 import tensorflow as tf
@@ -27,7 +28,7 @@ import tensorflow as tf
 def auto_nest(func):
   """Automatically support nested tensors in the first argument."""
   def wrapper(tensors, *args, **kwargs):
-    return tf.contrib.framework.nest.map_structure(
+    return tree.map_structure(
         lambda x: func(x, *args, **kwargs), tensors)
   return wrapper
 
@@ -185,7 +186,7 @@ def extract_patches_2d(
   padded = pad_periodic(tensor, paddings)
 
   size_x, size_y = kernel_size
-  extracted = tf.extract_image_patches(padded[..., tf.newaxis],
+  extracted = tf.compat.v1.extract_image_patches(padded[..., tf.newaxis],
                                        [1, size_x, size_y, 1],
                                        strides=[1, 1, 1, 1],
                                        rates=[1, 1, 1, 1],
@@ -419,7 +420,7 @@ def stack_all_contiguous_slices(
     tensor: tf.Tensor, slice_size: int, new_axis: int = 0,
 ) -> tf.Tensor:
   """Stack all contiguous slices along the first axis of a tensor."""
-  size = tensor.shape[0].value
+  size = tensor.shape[0]
   return tf.stack([tensor[i : i+slice_size]
                    for i in range(size - slice_size + 1)], axis=new_axis)
 

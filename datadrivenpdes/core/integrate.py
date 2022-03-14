@@ -17,23 +17,15 @@
 from typing import Dict, Union
 
 import numpy as np
+import tree
 from datadrivenpdes.core import models
 from datadrivenpdes.core import tensor_ops
 import tensorflow as tf
-
-nest = tf.contrib.framework.nest
-xla = tf.contrib.compiler.xla
 
 KeyedTensors = Dict[str, tf.Tensor]
 
 # Note: Python's type system allows supplying substituting integers for floats
 ArrayLike = Union[np.ndarray, np.generic, float]
-
-
-def _xla_decorator(func):
-  def wrapper(*args):
-    return xla.compile(func, args)
-  return wrapper
 
 
 def integrate_steps(
@@ -63,7 +55,7 @@ def integrate_steps(
   # TODO(shoyer): explicitly include time?
   del initial_time  # unused
 
-  state = nest.map_structure(tf.convert_to_tensor, state)
+  state = tree.map_structure(tf.convert_to_tensor, state)
   steps = tf.convert_to_tensor(steps, dtype=tf.int32)
   constant_state = {k: v for k, v in state.items()
                     if k in model.equation.constant_keys}
@@ -72,7 +64,8 @@ def integrate_steps(
 
   def advance_one_step(state):
     return model.take_time_step({**state, **constant_state})
-
+  
+  tf.function(jit_compile=True)
   def advance_until_saved_step(evolving_state, start_stop):
     """Integrate until the next step at which to save results."""
     start, stop = start_stop
@@ -83,14 +76,11 @@ def integrate_steps(
     )
     return result
 
-  if xla_compile:
-    advance_until_saved_step = _xla_decorator(advance_until_saved_step)
-
   starts = tf.concat([[0], steps[:-1]], axis=0)
   integrated = tf.scan(advance_until_saved_step, [starts, steps],
                        initializer=evolving_state)
 
-  integrated_constants = nest.map_structure(
+  integrated_constants = tree.map_structure(
       lambda x: tf.broadcast_to(x, steps.shape.as_list() + x.shape.as_list()),
       constant_state)
   integrated.update(integrated_constants)

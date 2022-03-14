@@ -23,7 +23,6 @@ import tensorflow as tf
 from absl.testing import absltest
 
 
-tf.enable_eager_execution()
 
 
 class ConstantVelocityFieldTest(absltest.TestCase):

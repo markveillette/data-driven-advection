@@ -33,8 +33,6 @@ from datadrivenpdes.advection import equations as advection_equations
 # pylint: enable=unused-import,g-bad-import-order
 
 from apache_beam import runners
-# our beam pipeline requires eager mode
-tf.enable_eager_execution()
 
 # files
 flags.DEFINE_string(

@@ -22,6 +22,7 @@ import json
 import operator
 from typing import Any, Dict, List, Mapping, Tuple, TypeVar
 
+import tree
 import numpy as np
 from datadrivenpdes.core import equations
 from datadrivenpdes.core import grids
@@ -31,9 +32,7 @@ from datadrivenpdes.core import states
 from datadrivenpdes.core import tensor_ops
 from datadrivenpdes.core import utils
 import tensorflow as tf
-from tensorflow.io import gfile
 
-nest = tf.contrib.framework.nest
 
 
 KeyedTensors = Dict[states.StateDefinition, tf.Tensor]
@@ -77,7 +76,7 @@ def unstack_dict(
     num: int,
 ) -> List[Dict[T, tf.Tensor]]:
   """Unstack keyed tensors into a list."""
-  unstacked = tf.contrib.framework.nest.map_structure(
+  unstacked = tree.map_structure(
       lambda x: tf.unstack(x, num), state)
   result = [{} for _ in range(num)]
   for k, tensor_list in unstacked.items():
@@ -205,7 +204,7 @@ class Builder:
         example_num_time_steps=self.example_num_time_steps,
         flags=flags,
     )
-    with gfile.GFile(metadata_path, 'w') as f:
+    with tf.io.gfile.GFile(metadata_path, 'w') as f:
       f.write(json.dumps(config, indent=4, sort_keys=True))
 
 
@@ -308,7 +307,7 @@ class TimeEvolution(Builder):
       result.append(((key_defs[k].exact(), self.output_grid), v))
 
     # baseline solution
-    initial_coarse_state = nest.map_structure(
+    initial_coarse_state = tree.map_structure(
         operator.itemgetter(0), coarse_state)
     integrated_baseline = integrate.integrate_steps(
         self.coarse_model, initial_coarse_state,

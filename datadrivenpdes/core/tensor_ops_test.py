@@ -23,8 +23,6 @@ import tensorflow as tf
 
 from absl.testing import absltest
 
-# Use eager mode by default
-tf.enable_eager_execution()
 
 
 def tf_roll_2d(tensor, shifts, axes=(-2, -1)):
@@ -39,8 +37,8 @@ class TensorOpsTest(parameterized.TestCase):
       ('even_odd_shifts', (10, 11)),
       ('odd_even_shifts', (13, 6)))
   def test_roll_consistency(self, shifts):
-    batch_input = tf.random_uniform(shape=(2, 50, 50))
-    single_input = tf.random_uniform(shape=(25, 25))
+    batch_input = tf.random.uniform(shape=(2, 50, 50))
+    single_input = tf.random.uniform(shape=(25, 25))
 
     batch_manip = tf_roll_2d(batch_input, shifts)
     batch_concat = tensor_ops.roll_2d(batch_input, shifts)

@@ -22,8 +22,6 @@ import tensorflow as tf
 
 from absl.testing import absltest
 
-# tests assume eager execution
-tf.enable_eager_execution()
 
 
 X = states.Dimension.X

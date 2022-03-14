@@ -21,9 +21,6 @@ from datadrivenpdes.core import polynomials
 import tensorflow as tf
 
 
-# this simplifies tests
-tf.enable_eager_execution()
-
 FINITE_DIFF = polynomials.Method.FINITE_DIFFERENCE
 FINITE_VOL = polynomials.Method.FINITE_VOLUME
 

@@ -22,7 +22,7 @@ from absl.testing import parameterized
 import apache_beam as beam
 from datadrivenpdes.core import builders
 from datadrivenpdes.pipelines import create_training_data
-from tensorflow import gfile
+import tensorflow as tf
 from absl.testing import absltest
 
 FLAGS = flags.FLAGS
@@ -68,8 +68,8 @@ class CreateTrainingDataTest(parameterized.TestCase):
     data_path = os.path.join(output_path,
                              output_name + '.tfrecord-00000-of-0000%i' % shards)
     metadata_path = os.path.join(output_path, output_name + '.metadata.json')
-    self.assertTrue(gfile.Exists(data_path))
-    self.assertTrue(gfile.Exists(metadata_path))
+    self.assertTrue(tf.io.gfile.exists(data_path))
+    self.assertTrue(tf.io.gfile.exists(metadata_path))
 
 
 if __name__ == '__main__':
